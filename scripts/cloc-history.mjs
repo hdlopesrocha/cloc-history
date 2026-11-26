@@ -171,6 +171,6 @@ if (!quiet) {
   const langs = result.languages.length;
   const final = result.summary;
   process.stderr.write(
-    `Done  ${result.commits.length} commits · ${final.code.toLocaleString()} code lines · ${langs} languages\n`,
+    `Done  ${result.commits.length} commits · ${final.code.toLocaleString()} code lines · +${(final.added ?? 0).toLocaleString()}/−${(final.deleted ?? 0).toLocaleString()} churn · ${langs} languages\n`,
   );
 }

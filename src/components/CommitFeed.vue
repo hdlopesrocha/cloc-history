@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue';
-import { formatCompact, formatDate, formatDelta, formatRelative } from '../utils/format.js';
+import { formatCompact, formatDate, formatRelative } from '../utils/format.js';
 
 const props = defineProps({
   commits: { type: Array, required: true },
@@ -53,22 +53,16 @@ const rows = computed(() => {
     .map((commit, index) => {
       const absoluteIndex = props.commits.length - count + index;
       const previous = props.commits[absoluteIndex - 1];
-      const value = totalFor(commit);
-      const previousValue = previous ? totalFor(previous) : null;
       return {
         commit,
-        value,
-        delta: previousValue === null ? null : value - previousValue,
+        value: totalFor(commit),
         mover: biggestMover(commit, previous),
+        added: commit.changes?.added,
+        deleted: commit.changes?.deleted,
       };
     })
     .reverse();
 });
-
-function deltaTone(delta) {
-  if (!delta) return 'neutral';
-  return delta > 0 ? 'positive' : 'negative';
-}
 </script>
 
 <template>
@@ -104,10 +98,11 @@ function deltaTone(delta) {
 
         <div class="commit-numbers">
           <span class="commit-value">{{ formatCompact(row.value) }}</span>
-          <span v-if="row.delta !== null" class="commit-delta" :class="deltaTone(row.delta)">
-            {{ formatDelta(row.delta, true) }}
+          <span v-if="row.added !== undefined || row.deleted !== undefined" class="commit-churn">
+            <span class="churn-added">+{{ formatCompact(row.added ?? 0) }}</span>
+            <span class="churn-deleted">−{{ formatCompact(row.deleted ?? 0) }}</span>
           </span>
-          <span v-else class="commit-delta neutral">baseline</span>
+          <span v-else class="commit-churn muted">no Git churn data</span>
         </div>
 
         <div v-if="row.mover" class="commit-mover" :title="`Largest change: ${row.mover.name}`">
@@ -118,7 +113,7 @@ function deltaTone(delta) {
     </div>
 
     <footer class="panel-footer">
-      <span>Growth is measured against the previous commit.</span>
+      <span>Size is measured at each commit; +/- are Git line changes.</span>
       <span v-if="commits.length > 9">+{{ commits.length - 9 }} more in the full CSV</span>
     </footer>
   </section>
@@ -247,21 +242,25 @@ function deltaTone(delta) {
   font-weight: 500;
 }
 
-.commit-delta {
+.commit-churn {
+  display: inline-flex;
+  gap: 5px;
   font-size: 9px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
-.commit-delta.positive {
+.commit-churn.muted {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.churn-added {
   color: var(--success);
 }
 
-.commit-delta.negative {
+.churn-deleted {
   color: var(--danger);
-}
-
-.commit-delta.neutral {
-  color: var(--text-faint);
 }
 
 .commit-mover {

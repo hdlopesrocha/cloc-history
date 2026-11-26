@@ -22,6 +22,9 @@ export function scanToCsv(scan) {
     'blank',
     'total_lines',
     'files',
+    'added',
+    'deleted',
+    'changed_files',
     ...languageNames.flatMap((name) => [
       `${name} code`,
       `${name} comment`,
@@ -44,6 +47,9 @@ export function scanToCsv(scan) {
       commit.totals.blank,
       commit.totals.lines,
       commit.totals.files,
+      commit.changes?.added ?? 0,
+      commit.changes?.deleted ?? 0,
+      commit.changes?.filesChanged ?? 0,
       ...languageNames.flatMap((name) => {
         const entry = languages.get(name);
         return [entry?.code ?? 0, entry?.comment ?? 0, entry?.blank ?? 0, entry?.files ?? 0];

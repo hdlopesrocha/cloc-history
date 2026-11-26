@@ -169,7 +169,7 @@ export function createDemoScan() {
   const commitCount = 164;
   const states = new Map();
   const commits = [];
-  let cursor = new Date('2024-08-19T09:14:00.000Z').getTime();
+  let cursor = new Date('2024-08-01T09:14:00.000Z').getTime();
 
   for (let index = 0; index < commitCount; index += 1) {
     cursor += (2 + Math.floor(random() * 7)) * 24 * 60 * 60 * 1000;
@@ -245,6 +245,26 @@ export function createDemoScan() {
     totals.lines = totals.code + totals.comment + totals.blank;
     languages.sort((a, b) => b.code - a.code || a.name.localeCompare(b.name));
 
+    const previousTotals = commits.at(-1)?.totals;
+    const netLineChange = index === 0 ? totals.lines : totals.lines - (previousTotals?.lines ?? 0);
+    const churnBase = isRefactor
+      ? 900 + random() * 2400
+      : isSmallFix
+        ? 8 + random() * 45
+        : 40 + random() * 260;
+    let added;
+    let deleted;
+    if (index === 0) {
+      added = totals.lines;
+      deleted = 0;
+    } else if (netLineChange >= 0) {
+      deleted = round(churnBase);
+      added = netLineChange + deleted;
+    } else {
+      added = round(churnBase);
+      deleted = added - netLineChange;
+    }
+
     const author = AUTHORS[Math.floor(random() * AUTHORS.length)];
     const subject = index === 0 ? 'feat: initial commit' : subjects[Math.floor(random() * subjects.length)];
     const date = new Date(cursor).toISOString();
@@ -260,6 +280,11 @@ export function createDemoScan() {
       subject,
       totals,
       languages,
+      changes: {
+        added: round(added),
+        deleted: round(deleted),
+        filesChanged: Math.max(1, Math.round(1 + random() * Math.min(activeProfiles.length, 14))),
+      },
     });
   }
 
@@ -285,6 +310,16 @@ export function createDemoScan() {
   }
 
   const last = commits.at(-1);
+  const churnTotals = commits.reduce(
+    (total, commit) => {
+      total.added += commit.changes.added;
+      total.deleted += commit.changes.deleted;
+      total.filesChanged += commit.changes.filesChanged;
+      return total;
+    },
+    { added: 0, deleted: 0, filesChanged: 0 },
+  );
+
   return {
     id: 'demo',
     repoPath: '/example/atlas-console',
@@ -313,6 +348,9 @@ export function createDemoScan() {
       comment: last.totals.comment,
       blank: last.totals.blank,
       files: last.totals.files,
+      added: churnTotals.added,
+      deleted: churnTotals.deleted,
+      filesChanged: churnTotals.filesChanged,
     },
   };
 }

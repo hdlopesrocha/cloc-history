@@ -250,6 +250,73 @@ function shortSha(sha) {
   return sha.slice(0, 8);
 }
 
+function isExcludedPath(filePath, excludedFolders) {
+  if (!excludedFolders.size) return false;
+  const normalized = filePath.replace(/^"|"$/g, '');
+  return normalized.split(/[\\/]/).some((part) => excludedFolders.has(part));
+}
+
+async function collectCommitChurn({ repo, revision, excludeDirs, signal }) {
+  const excludedFolders = new Set(splitExcludeDirs(excludeDirs));
+  const baseArgs = [
+    'log',
+    '--reverse',
+    '--root',
+    '--numstat',
+    '--find-renames',
+    '--no-ext-diff',
+    '--format=@@commit:%H',
+    revision,
+  ];
+
+  let stdout;
+  try {
+    ({ stdout } = await git(
+      repo,
+      [
+        'log',
+        '--reverse',
+        '--root',
+        '--numstat',
+        '--diff-merges=first-parent',
+        '--find-renames',
+        '--no-ext-diff',
+        '--format=@@commit:%H',
+        revision,
+      ],
+      signal,
+    ));
+  } catch (error) {
+    // Git < 2.31 does not support --diff-merges=first-parent. Fall back to
+    // normal Git log behavior, which reports no line churn for merge commits.
+    if (error.code !== 'COMMAND_FAILED' || !/diff-merges/i.test(error.message)) throw error;
+    ({ stdout } = await git(repo, baseArgs, signal));
+  }
+
+  const churn = new Map();
+  let current = null;
+
+  for (const line of stdout.split('\n')) {
+    if (line.startsWith('@@commit:')) {
+      const sha = line.slice('@@commit:'.length).trim();
+      current = { added: 0, deleted: 0, filesChanged: 0 };
+      churn.set(sha, current);
+      continue;
+    }
+    if (!current || !line) continue;
+
+    const match = line.match(/^(\d+|-)\t(\d+|-)\t(.+)$/);
+    if (!match || isExcludedPath(match[3], excludedFolders)) continue;
+
+    current.filesChanged += 1;
+    if (match[1] === '-' || match[2] === '-') continue; // binary file
+    current.added += Number(match[1]) || 0;
+    current.deleted += Number(match[2]) || 0;
+  }
+
+  return churn;
+}
+
 export async function scanRepository({
   repoPath,
   revision = 'HEAD',
@@ -285,6 +352,19 @@ export async function scanRepository({
     current: 0,
     total: commits.length,
     message: `Counting ${commits.length} commit${commits.length === 1 ? '' : 's'} with ${effectiveConcurrency} worker${effectiveConcurrency === 1 ? '' : 's'}…`,
+  });
+
+  onProgress({
+    phase: 'counting',
+    current: 0,
+    total: commits.length,
+    message: 'Collecting Git additions and deletions…',
+  });
+  const churnByCommit = await collectCommitChurn({
+    repo: repo.repoPath,
+    revision: resolvedRevision,
+    excludeDirs,
+    signal,
   });
 
   const treeCache = new Map();
@@ -338,6 +418,7 @@ export async function scanRepository({
       const commit = commits[index];
       try {
         const counted = await countForCommit(commit);
+        const churn = churnByCommit.get(commit.sha) || { added: 0, deleted: 0, filesChanged: 0 };
         resultCommits[index] = {
           sha: commit.sha,
           shortSha: shortSha(commit.sha),
@@ -348,6 +429,7 @@ export async function scanRepository({
           subject: commit.subject,
           totals: counted.totals,
           languages: counted.languages,
+          changes: churn,
         };
 
         completed += 1;
@@ -406,6 +488,16 @@ export async function scanRepository({
   }
 
   const last = resultCommits.at(-1);
+  const churnTotals = resultCommits.reduce(
+    (total, commit) => {
+      total.added += commit.changes?.added || 0;
+      total.deleted += commit.changes?.deleted || 0;
+      total.filesChanged += commit.changes?.filesChanged || 0;
+      return total;
+    },
+    { added: 0, deleted: 0, filesChanged: 0 },
+  );
+
   const result = {
     id: createHash('sha1')
       .update(`${repo.repoPath}:${resolvedRevision}:${Date.now()}:${Math.random()}`)
@@ -440,6 +532,9 @@ export async function scanRepository({
       comment: last?.totals.comment ?? 0,
       blank: last?.totals.blank ?? 0,
       files: last?.totals.files ?? 0,
+      added: churnTotals.added,
+      deleted: churnTotals.deleted,
+      filesChanged: churnTotals.filesChanged,
     },
   };
 
@@ -469,6 +564,9 @@ export function formatCsv(scan) {
     'blank',
     'total_lines',
     'files',
+    'added',
+    'deleted',
+    'changed_files',
     ...languageNames.flatMap((name) => [
       `${name} code`,
       `${name} comment`,
@@ -491,6 +589,9 @@ export function formatCsv(scan) {
       commit.totals.blank,
       commit.totals.lines,
       commit.totals.files,
+      commit.changes?.added ?? 0,
+      commit.changes?.deleted ?? 0,
+      commit.changes?.filesChanged ?? 0,
       ...languageNames.flatMap((name) => {
         const entry = byLanguage.get(name);
         return [entry?.code ?? 0, entry?.comment ?? 0, entry?.blank ?? 0, entry?.files ?? 0];

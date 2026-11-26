@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   AlertTriangle,
+  ArrowDownToLine,
+  ArrowUpFromLine,
   CalendarRange,
   ChartArea,
   ChartColumn,
@@ -202,6 +204,33 @@ const peak = computed(() => {
 });
 
 const trendValues = computed(() => commits.value.map((commit) => commitTotal(commit)));
+const totalAdded = computed(() => {
+  const summaryValue = currentScan.value?.summary?.added;
+  if (Number.isFinite(summaryValue)) return summaryValue;
+  return commits.value.reduce((sum, commit) => sum + (commit.changes?.added || 0), 0);
+});
+const totalDeleted = computed(() => {
+  const summaryValue = currentScan.value?.summary?.deleted;
+  if (Number.isFinite(summaryValue)) return summaryValue;
+  return commits.value.reduce((sum, commit) => sum + (commit.changes?.deleted || 0), 0);
+});
+const hasChurnData = computed(() => (
+  Number.isFinite(currentScan.value?.summary?.added) ||
+  commits.value.some((commit) => Boolean(commit.changes))
+));
+const addedTrend = computed(() => commits.value.map((commit) => commit.changes?.added ?? 0));
+const deletedTrend = computed(() => commits.value.map((commit) => commit.changes?.deleted ?? 0));
+const totalAddedLabel = computed(() => (hasChurnData.value ? `+${formatNumber(totalAdded.value)}` : '—'));
+const totalDeletedLabel = computed(() => (hasChurnData.value ? `−${formatNumber(totalDeleted.value)}` : '—'));
+const addedDetail = computed(() => {
+  if (!hasChurnData.value) return 'rescan to collect Git churn';
+  return `avg ${formatNumber(commitCount.value ? Math.round(totalAdded.value / commitCount.value) : 0)} / commit`;
+});
+const deletedDetail = computed(() => {
+  if (!hasChurnData.value) return 'rescan to collect Git churn';
+  return `avg ${formatNumber(commitCount.value ? Math.round(totalDeleted.value / commitCount.value) : 0)} / commit`;
+});
+const churnHint = 'Git line additions/deletions across all text files outside excluded folders. Comments and blank lines are included.';
 const activeLanguageCount = computed(() => latestCommit.value?.languages.filter((language) => language.code > 0).length ?? 0);
 const historicalLanguageCount = computed(() => currentScan.value?.languages.length ?? 0);
 const filesAtHead = computed(() => latestCommit.value?.totals.files ?? 0);
@@ -790,6 +819,24 @@ const bootShow = computed(() => bootLoading.value && !activeJob.value);
                 :sparkline="trendValues"
               />
               <StatCard
+                label="Total added"
+                :value="totalAddedLabel"
+                :detail="addedDetail"
+                :icon="ArrowUpFromLine"
+                tint="var(--success)"
+                :sparkline="hasChurnData ? addedTrend : []"
+                :hint="churnHint"
+              />
+              <StatCard
+                label="Total deleted"
+                :value="totalDeletedLabel"
+                :detail="deletedDetail"
+                :icon="ArrowDownToLine"
+                tint="var(--danger)"
+                :sparkline="hasChurnData ? deletedTrend : []"
+                :hint="churnHint"
+              />
+              <StatCard
                 label="Net growth"
                 :value="netGrowthLabel"
                 :detail="growthDetailLabel"
@@ -1232,7 +1279,7 @@ const bootShow = computed(() => bootLoading.value && !activeJob.value);
   display: grid;
   gap: 10px;
   margin-top: 20px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .panel {
@@ -1716,10 +1763,6 @@ const bootShow = computed(() => bootLoading.value && !activeJob.value);
     padding-left: 22px;
   }
 
-  .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .chart-heading {
     flex-direction: column;
     gap: 14px;
@@ -1736,6 +1779,12 @@ const bootShow = computed(() => bootLoading.value && !activeJob.value);
 
   .export-label {
     display: inline;
+  }
+}
+
+@media (max-width: 900px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

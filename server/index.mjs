@@ -113,6 +113,8 @@ function scanMeta(scan) {
     commitCount: scan.summary?.commitCount ?? scan.commits.length,
     availableCommits: scan.availableCommits ?? scan.commits.length,
     code: scan.summary?.code ?? 0,
+    added: scan.summary?.added ?? 0,
+    deleted: scan.summary?.deleted ?? 0,
     languageCount: scan.languages.length,
     durationMs: scan.durationMs ?? 0,
     firstDate: scan.summary?.firstDate ?? null,

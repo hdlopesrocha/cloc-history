@@ -366,6 +366,23 @@ code {
   font-size: 8.5px;
 }
 
+.chart-tip-churn {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 500;
+}
+
+.chart-tip-churn .added {
+  color: var(--success);
+}
+
+.chart-tip-churn .deleted {
+  color: var(--danger);
+}
+
 .chart-tip-list {
   display: flex;
   max-height: 370px;

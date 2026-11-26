@@ -11,6 +11,7 @@ const props = defineProps({
   delta: { type: String, default: '' },
   deltaTone: { type: String, default: 'positive' },
   sparkline: { type: Array, default: () => [] },
+  hint: { type: String, default: '' },
 });
 
 const geometry = computed(() => {
@@ -36,7 +37,7 @@ const geometry = computed(() => {
 </script>
 
 <template>
-  <article class="stat-card">
+  <article class="stat-card" :title="hint || undefined">
     <div class="stat-topline">
       <span class="stat-label">{{ label }}</span>
       <span v-if="icon" class="stat-icon" :style="{ color: tint, background: `color-mix(in srgb, ${tint} 10%, transparent)` }">

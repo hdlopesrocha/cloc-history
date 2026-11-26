@@ -71,6 +71,13 @@ function tooltipFormatter(params) {
           <span class="chart-tip-value">${formatNumber(row.value)}</span>
         </div>`).join('')
     : '<div class="chart-tip-empty">No visible lines at this commit.</div>';
+  const hasChurn = Number.isFinite(commit.changes?.added) || Number.isFinite(commit.changes?.deleted);
+  const churn = hasChurn
+    ? `<div class="chart-tip-churn">
+        <span class="added">+${formatNumber(commit.changes?.added ?? 0)} added</span>
+        <span class="deleted">−${formatNumber(commit.changes?.deleted ?? 0)} deleted</span>
+      </div>`
+    : '';
 
   return `
     <div class="chart-tip">
@@ -80,6 +87,7 @@ function tooltipFormatter(params) {
       </div>
       <div class="chart-tip-subject">${escapeHtml(commit.subject)}</div>
       <div class="chart-tip-author">${escapeHtml(commit.author)}</div>
+      ${churn}
       <div class="chart-tip-list">${list}</div>
       <div class="chart-tip-total">
         <span>Visible total</span>

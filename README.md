@@ -20,9 +20,11 @@ customizable timeline.
 - **Exclusions that fit your repo** — edit the folder exclusion list per scan
   (`node_modules`, `bin`, `third_party`, `vendor`, ...). Excluded names match at
   any depth.
+- **Line churn totals** — total lines added and deleted, summed across every
+  scanned commit and shown alongside project size.
 - **Exports** — download a high-resolution PNG chart (with title and legend) or
   a CSV containing totals plus code/comment/blank/file counts for every language
-  at every commit.
+  at every commit, plus Git additions/deletions.
 - **Saved scans** — completed scans are stored locally and reopen automatically.
   Delete them from the sidebar when no longer needed.
 - **CLI** — run the same scanner headlessly and write CSV/JSON for automation.
@@ -95,10 +97,13 @@ cancelled. Results are saved under `.data/scans/` and appear in the sidebar.
 - **Language mix** — current composition at `HEAD`; percentages are of the
   selected metric across all languages. Click a row to toggle it. Click the
   pipette icon on hover to assign a custom color (saved in `localStorage`).
-- **Recent commits** — latest nine commits with their delta from the previous
-  commit and the language with the largest change.
-- **Export CSV** — every commit, every language, all metrics. This is independent
-  of the chart's current language filter.
+- **Recent commits** — latest nine commits with their metric value, Git
+  additions/deletions, and the language with the largest change.
+- **Churn summary** — totals for every added and deleted line across the scan,
+  plus per-commit averages, alongside current size and net growth.
+- **Export CSV** — every commit, every language, all metrics, plus Git
+  `added`/`deleted`/`changed_files`. This is independent of the chart's current
+  language filter.
 - **PNG** — exports the current chart with the selected metric, visible
   languages, title, and legend.
 - **History scope** — the timeline counts committed Git trees. Uncommitted or
@@ -136,10 +141,12 @@ Run `npm run scan -- --help` for all options.
 One row per commit. The leading columns are:
 
 ```text
-date,sha,short_sha,author,email,subject,code,comment,blank,total_lines,files
+date,sha,short_sha,author,email,subject,code,comment,blank,total_lines,files,added,deleted,changed_files
 ```
 
-They are followed by four columns for every language encountered:
+`added` and `deleted` are Git line changes for that commit (against its first
+parent for merge commits), filtered by the configured folder exclusions. They
+are followed by four columns for every language encountered:
 
 ```text
 <Language> code,<Language> comment,<Language> blank,<Language> files
@@ -168,9 +175,11 @@ intentionally not the default.
 ## How it works
 
 1. Resolve the repository root and the commit list with `git log`.
-2. For each commit, run `cloc --git --json --quiet --exclude-dir=... <sha>`.
-3. Parse cloc's JSON, normalize totals, and cache counts by Git tree hash.
-4. Persist the scan result and build the dashboard/CSV/PNG from that snapshot.
+2. Collect per-commit Git additions/deletions with `git log --numstat`,
+   excluding configured folders.
+3. For each commit, run `cloc --git --json --quiet --exclude-dir=... <sha>`.
+4. Parse cloc's JSON, normalize totals, and cache counts by Git tree hash.
+5. Persist the scan result and build the dashboard/CSV/PNG from that snapshot.
 
 The chart is rendered with [ECharts](https://echarts.apache.org/); PNG export
 uses a dedicated off-screen render with a title and native legend so the image
@@ -208,8 +217,14 @@ npm run scan -- --help
 
 - Exclusions are folder names, not glob patterns. A folder named `dist` is
   skipped wherever it appears; `.git` is always skipped.
+- Added/deleted totals use Git's line-diff `--numstat` output. They include all
+  text-file changes outside excluded folders (not just languages recognized by
+  cloc). Binary files contribute to `changed_files` but not line counts. Because
+  they include comments and blank lines, `added − deleted` does not necessarily
+  equal the code-only line count shown by cloc.
 - Merge commits are counted as their resulting tree unless you enable
-  first-parent mode. Tree caching avoids recounting unchanged merge trees.
+  first-parent mode. For churn, merge commits are diffed against their first
+  parent. Tree caching avoids recounting unchanged merge trees.
 - The timeline reflects committed history. Uncommitted changes in the working
   tree are intentionally excluded.
 - cloc only counts file types it recognizes. Languages not supported by cloc
